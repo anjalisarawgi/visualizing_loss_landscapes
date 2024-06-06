@@ -14,13 +14,51 @@ from sklearn.neighbors import NearestNeighbors
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split, Subset
 from model import MyAwesomeModel
-from evaluation_metrics import evaluate_trustworthiness, evaluate_continuity, evaluate_mse, set_seed
-from autoencoders import train_autoencoder 
+from visualizing_loss_landscapes.misc.autoencoders import train_autoencoder
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# setting the metrics for evaluation
+def evaluate_trustworthiness(original_data, reduced_data, n_neighbors=5):
+    return trustworthiness(original_data, reduced_data, n_neighbors=n_neighbors)
+
+
+def evaluate_continuity(original_data, reduced_data, n_neighbors=5):
+    nbrs_original = NearestNeighbors(
+        n_neighbors=n_neighbors).fit(original_data)
+    nbrs_reduced = NearestNeighbors(n_neighbors=n_neighbors).fit(reduced_data)
+
+    indices_original = nbrs_original.kneighbors(return_distance=False)
+    indices_reduced = nbrs_reduced.kneighbors(return_distance=False)
+
+    continuity_sum = 0.0
+    n_samples = original_data.shape[0]
+
+    for i in range(n_samples):
+        intersect = len(set(indices_original[i]) & set(indices_reduced[i]))
+        continuity_sum += intersect / n_neighbors
+
+    continuity_score = continuity_sum / n_samples
+    return continuity_score
+
+
+def evaluate_mse(original_data, reconstructed_data):
+    return mean_squared_error(original_data, reconstructed_data)
+
+
+def set_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
 
 seed = 42
 set_seed(seed)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Dataset
 transform = transforms.Compose([transforms.ToTensor()])
@@ -162,8 +200,6 @@ print("plotting loss landscape UMAP")
 plot_loss_landscape(weights_umap, "UMAP")
 
 print("all done!")
-
-
 
 
 # AUTOENCODERS
