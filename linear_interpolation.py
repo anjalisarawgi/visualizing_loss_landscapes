@@ -38,8 +38,8 @@ val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
 net = MyAwesomeModel()
 net.to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(net.parameters(), lr=0.001)
-
+optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.9) #  a lower learning rate with added momentum
+optimizer = optim.Adam(net.parameters(), lr=0.001)
 initial_weights = None
 final_weights = None
 
@@ -86,7 +86,7 @@ def plot_linear_interpolation(initial_weights, final_weights, steps=100):
     plt.xlabel('Interpolation factor (α)')
     plt.ylabel('Loss')
     plt.title('Loss along Linear Interpolation Path')
-    plt.savefig('loss_interpolation_sgd.png')
+    plt.savefig('loss_interpolation_adam.png')
 
 
 print("plotting loss landscape")

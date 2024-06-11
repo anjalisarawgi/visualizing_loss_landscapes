@@ -14,7 +14,7 @@ from sklearn.neighbors import NearestNeighbors
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split, Subset
 from model import MyAwesomeModel
-from visualizing_loss_landscapes.misc.autoencoders import train_autoencoder
+# from visualizing_loss_landscapes.misc.autoencoders import train_autoencoder
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -71,6 +71,7 @@ mnist_dataset = datasets.MNIST(
 # train_dataset, val_dataset = random_split(mnist_subset, [400, 100])
 
 train_dataset, val_dataset = random_split(mnist_dataset, [50000, 10000])
+
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
 
@@ -82,7 +83,7 @@ losses = []
 net = MyAwesomeModel().to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(net.parameters(), lr=0.001)
-
+# optimizer = optim.SGD(net.parameters(), lr=0.01, momentum = 0.9)
 
 for epoch in range(5):
     net.train()
@@ -102,17 +103,19 @@ weights = np.array(weights)
 losses = np.array(losses)
 
 
+# Function to calculate the loss for the final weights
+
+# Get the final weights after training
+
 def l2_normalize(weights):
     norms = np.linalg.norm(weights, axis=1, keepdims=True)
     normalized_weights = weights / norms
     return normalized_weights
 
-
+# normalizing the weights
 normalized_weights = l2_normalize(weights)
 
 # function to plot our loss landscapes
-
-
 def plot_loss_landscape(weights_reduced, method_name):
     grid_size = 30
     x = np.linspace(weights_reduced[:, 0].min(),
@@ -129,6 +132,7 @@ def plot_loss_landscape(weights_reduced, method_name):
         grid_points_orig = pca.inverse_transform(grid_points)
 
     grid_losses = []
+    grid_accuracies = []
     for i in range(grid_points_orig.shape[0]):
         projected_weight = grid_points_orig[i].reshape(
             net.conv1.weight.data.shape)
@@ -136,17 +140,29 @@ def plot_loss_landscape(weights_reduced, method_name):
             projected_weight, dtype=torch.float32).to(device)
 
         batch_losses = []
+        correct = 0
+        total = 0
         for data, target in val_loader:
             data, target = data.to(device), target.to(device)
             outputs = net(data)
             loss = criterion(outputs, target).item()
             batch_losses.append(loss)
+            
+            _, predicted = torch.max(outputs.data, 1)
+            total += target.size(0)
+            correct += (predicted == target).sum().item()
+
 
         grid_losses.append(np.mean(batch_losses))
+        grid_accuracies.append(correct / total)
 
     grid_losses = np.array(grid_losses).reshape(xx.shape)
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
+    grid_accuracies = np.array(grid_accuracies).reshape(xx.shape)
+
+    fig = plt.figure(figsize=(20, 16))
+    
+    # 3D plot for loss landscape
+    ax = fig.add_subplot(2, 2, 1, projection='3d')
     ax.plot_surface(xx, yy, grid_losses, cmap='viridis', edgecolor='none')
     ax.contour(xx, yy, grid_losses, zdir='z',
                offset=np.min(grid_losses), cmap='viridis')
@@ -155,9 +171,44 @@ def plot_loss_landscape(weights_reduced, method_name):
     ax.set_zlabel('Loss')
     ax.set_title(f'3D {method_name} Visualization of Loss Landscape')
 
-    plt.savefig(f'loss_landscape_2_{method_name.lower()}.png')
-    plt.close(fig)
+    # Highlight the final weights and final loss in 3D plot
+    final_weight = weights_reduced[-1]
+    final_loss = losses[-1]
+    ax.scatter(final_weight[0], final_weight[1], final_loss, color='r', s=100, label='Final Weights and Loss')
+    ax.legend()
 
+
+    # Contour Plot for loss landscape
+    ax_contour = fig.add_subplot(2, 2, 2)
+    contour = ax_contour.contourf(xx, yy, grid_losses, cmap='viridis')
+    fig.colorbar(contour, ax=ax_contour)
+    ax_contour.scatter(final_weight[0], final_weight[1], color='r', s=100, label='Final Weights and Loss')
+    ax_contour.set_xlabel(f'{method_name} Dimension 1')
+    ax_contour.set_ylabel(f'{method_name} Dimension 2')
+    ax_contour.set_title(f'{method_name} Contour Plot of Loss Landscape')
+    ax_contour.legend()
+
+    # 3D Surface Plot of Accuracy Landscape
+    ax3 = fig.add_subplot(2, 2, 3, projection='3d')
+    ax3.plot_surface(xx, yy, grid_accuracies, cmap='viridis', edgecolor='none')
+    ax3.set_xlabel(f'{method_name} Dimension 1')
+    ax3.set_ylabel(f'{method_name} Dimension 2')
+    ax3.set_zlabel('Accuracy')
+    ax3.set_title(f'3D {method_name} Visualization of Accuracy Landscap')
+
+    # Contour Plot for Accuracy
+    ax_acc = fig.add_subplot(2, 2, 4)
+    contour_acc = ax_acc.contourf(xx, yy, grid_accuracies, cmap='viridis')
+    fig.colorbar(contour_acc, ax=ax_acc)
+    ax_acc.scatter(final_weight[0], final_weight[1], color='r', s=100, label='Final Weights')
+    ax_acc.set_xlabel(f'{method_name} Dimension 1')
+    ax_acc.set_ylabel(f'{method_name} Dimension 2')
+    ax_acc.set_title(f'{method_name} Contour Plot of Accuracy Landscape')
+    ax_acc.legend()
+
+    plt.tight_layout()
+    plt.savefig(f'landscape_plots_{method_name}.png')
+    plt.close(fig)
 
 # PCA
 pca = PCA(n_components=2)
@@ -174,7 +225,6 @@ print(f'MSE of PCA projection: {mse_pca:.4f}')
 # TSNE
 tsne = TSNE(n_components=2, random_state=42)
 weights_tsne = tsne.fit_transform(normalized_weights)
-
 trust_tsne = evaluate_trustworthiness(normalized_weights, weights_tsne)
 continuity_tsne = evaluate_continuity(normalized_weights, weights_tsne)
 print(f'Trustworthiness of t-SNE projection: {trust_tsne:.2f}')
@@ -190,16 +240,14 @@ print(f'Trustworthiness of UMAP projection: {trust_umap:.2f}')
 print(f'Continuity of UMAP projection: {continuity_umap:.2f}')
 
 # # Plot loss landscapes for each method
-# print("plotting loss landscape PCA")
-# plot_loss_landscape(weights_pca, "PCA")
+print("plotting loss landscape PCA")
+plot_loss_landscape(weights_pca, "PCA")
 
-# print("plotting loss landscape t-SNE")
-# plot_loss_landscape(weights_tsne, "t-SNE")
+print(f"Plotting loss landscape t-SNE ")
+plot_loss_landscape(weights_tsne, "t-SNE")
 
 print("plotting loss landscape UMAP")
 plot_loss_landscape(weights_umap, "UMAP")
 
 print("all done!")
 
-
-# AUTOENCODERS
