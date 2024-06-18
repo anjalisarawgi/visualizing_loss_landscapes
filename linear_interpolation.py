@@ -29,9 +29,10 @@ transform = transforms.Compose([transforms.ToTensor()])
 mnist_dataset = datasets.MNIST(
     root='./data', train=True, transform=transform, download=True)
 
-subset_indices = list(range(500))  # Use only 500 samples
-mnist_subset = Subset(mnist_dataset, subset_indices)
-train_dataset, val_dataset = random_split(mnist_subset, [400, 100])
+# subset_indices = list(range(500))  # Use only 500 samples
+# mnist_subset = Subset(mnist_dataset, subset_indices)
+# train_dataset, val_dataset = random_split(mnist_subset, [400, 100])
+train_dataset, val_dataset = random_split(mnist_dataset, [50000, 10000])
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
 
